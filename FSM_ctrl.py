@@ -59,10 +59,7 @@ distance_sensor.enable( TIME_STEP )
 position_sensor = robot.getDevice('wrist_1_joint_sensor')
 position_sensor.enable( TIME_STEP )
 if rName == "UR5e":
-    rangefnd_sensor = robot.getDevice('range-finder') 
-    rangefnd_sensor.enable( TIME_STEP )
-    rgbimage_sensor = robot.getDevice('camera') 
-    rgbimage_sensor.enable( TIME_STEP )
+    pass
 
 print( "Robot controller init:", rName )
 
@@ -99,8 +96,7 @@ while robot.step( timestep ) != -1:
     dist = distance_sensor.getValue()
     posn = position_sensor.getValue()
     if rName == "UR5e":
-        rang = rangefnd_sensor.getRangeImage()
-        imag = rgbimage_sensor.getImage()
+        pass
 
     # WAITING --> GRASPING #
     if state == State.WAITING:

@@ -24,7 +24,7 @@ from py_trees.behaviour import Behaviour
 from py_trees.common import Status
 from py_trees.decorators import FailureIsRunning
 from py_trees.composites import Sequence
-from py_trees.behaviours import TickCounter
+# from py_trees.behaviours import TickCounter
 ## WeBots ##
 from controller import Robot, Motor, DistanceSensor, PositionSensor
 ## Other ##
@@ -98,6 +98,24 @@ class UR_Controller( Robot ):
             # rang = self.rangefnd_sensor.getRangeImage()
             # imag = self.rgbimage_sensor.getImage()
         return dist, posn
+    
+    
+    def set_delay( self, delay = 10 ):
+        """ Set the countdown clock """
+        self.dlay = delay
+        
+        
+    def q_delayed( self ):
+        """ Return True if there is remaining countdown time """
+        return (self.dlay > 0)
+        
+        
+    def tick( self ):
+        """ Decrement the countdown clock """
+        if self.q_delayed():
+            self.dlay -= 1
+            
+
         
         
         
@@ -105,7 +123,7 @@ class UR_Controller( Robot ):
 
 # Robot #
 rbt = UR_Controller()
-rbt.set_motor_speed( 0.5 ) # UR motor speed
+rbt.set_motor_speed( 1.2 ) # UR motor speed
 
 # Constants #
 dwellSteps = 10 # - Number of timesteps to pause
@@ -184,6 +202,64 @@ class GetData( Behaviour ):
         
         
         
+class TickCounter( Behaviour ):
+    """
+    A useful utility behaviour for demos and tests. Simply
+    ticks with :data:`~py_trees.common.Status.RUNNING` for
+    the specified number of ticks before returning the
+    requested completion status (:data:`~py_trees.common.Status.SUCCESS`
+    or :data:`~py_trees.common.Status.FAILURE`).
+
+    This behaviour will reset the tick counter when initialising.
+
+    Args:
+        name: name of the behaviour
+        duration: number of ticks to run
+        completion_status: status to switch to once the counter has expired
+    """
+    def __init__(
+        self,
+        duration          = 1,
+        name              = "TickCounter",
+        completion_status = Status.SUCCESS
+    ):
+        super().__init__( name = name )
+        self.completion_status = completion_status
+        self.duration          = duration
+        self.counter           = 0
+        self.lock  = 0
+
+        
+    def initialise( self ):
+        """
+        Reset the tick counter.
+        """
+        print( "TickCounter initialized!" )
+        # self.counter = 0
+        self.status = Status.RUNNING
+        if not self.lock:
+            self.counter = 0
+            self.lock = 1
+        
+        
+    def terminate( self, newStatus ):
+        self.lock = 0
+
+    def update( self ):
+        """
+        Increment the tick counter and return the appropriate status for this behaviour
+        based on the tick count.
+
+        Returns
+            :data:`~py_trees.common.Status.RUNNING` while not expired, the given completion status otherwise
+        """
+        self.counter += 1
+        if self.counter <= self.duration:
+            self.status = Status.RUNNING
+        else:
+            self.status = self.completion_status
+        return self.status
+        
         
 """ ##### Conditions #####
 Conditions are syntactically identical to Behaviors. By convention, a condition answers a question
@@ -198,57 +274,56 @@ class COND_test_func( Behaviour ):
         super().__init__( name ) 
         self.func = func
         
+    def initialise( self ):
+        """ Remove INVALID status """
+        self.status = Status.RUNNING
+        
     def update( self ):
         """ Check parameter value against threshold """
-        if self.func():
-            print( f"Condition \"{self.name}\" TRUE" )
+        if self.func.__call__():
+            # print( f"Condition \"{self.name}\" TRUE" )
             self.status = Status.SUCCESS
         else:
-            print( f"Condition \"{self.name}\" FALSE" )
+            # print( f"Condition \"{self.name}\" FALSE" )
             self.status = Status.FAILURE
         return self.status
         
-        
+
+class MSG( Behaviour ):
+    def __init__( self, name = "MSG", initMsg = "Initialized!", tickMsg = "Success!" ):
+        """ Called once when the behavior is instantiated """
+        super().__init__( name ) 
+        self.initMsg = initMsg
+        self.tickMsg = tickMsg
+    def initialise( self ):
+        self.status = Status.RUNNING
+        print( self.initMsg )
+    def update( self ):
+        self.status = Status.SUCCESS
+        print( self.tickMsg )
+        return self.status
         
 ##### Actions #####
 
 class SetFingerAngles( Behaviour ):
     """ Send the finger motors to a configuration, pause """
     
-    def __init__( self, name = "SetFingerAngles", robotObj = None, delaySteps = 0, target = None ):
+    def __init__( self, name = "SetFingerAngles", robotObj = None, target = None ):
         """ Called once when the behavior is instantiated """
         super().__init__( name ) 
         self.robot  = robotObj
-        self.delay  = delaySteps
         self.target = target
     
     def initialise( self ):
         """ Set a target for the robot fingers, assume that they take `self.delay` timesteps to close """
-        global c
-        
-        if c < 0:
-            print( self.robot.rName, f", {self.name}: Set fingers to {self.target}" )
-            for i, mtr in enumerate( self.robot.hand_motors ):
+        print( self.robot.rName, f", {self.name}: Moving fingers to target {self.target}" )
+        for i, mtr in enumerate( self.robot.hand_motors ):
                 mtr.setPosition( self.target[i] )
-            c = self.delay
-        else:
-            print( self.robot.rName, f", {self.name}: Counter OTHER than expected {c}" )
-        # self.status = Status.RUNNING
+        self.status = Status.RUNNING
         
     def update( self ):
         """ Return 'RUNNING' until the counter runs out """
-        global c
-        
-        
-        if c > 0:
-            # self.status = Status.RUNNING
-            return Status.RUNNING
-        else:
-            # self.status = Status.SUCCESS # The appropriate thing would be to actually *check* that goal position reached
-            return Status.SUCCESS 
-            
-
-            
+        self.status = Status.SUCCESS 
         return self.status
         
         
@@ -266,13 +341,13 @@ class SetArmAngles( Behaviour ):
         print( self.robot.rName, f", {self.name}: Rotating arm to target {self.target}" )
         for i, mtr in enumerate( self.robot.ur_motors ):
             mtr.setPosition( self.target[i] )
-        # self.status = Status.RUNNING
+        self.status = Status.RUNNING
             
     def update( self ):
         """ Always succeed """
-        # self.status = Status.SUCCESS
-        # return self.status
-        return Status.SUCCESS
+        self.status = Status.SUCCESS
+        return self.status
+        # return Status.SUCCESS
             
 
         
@@ -303,24 +378,27 @@ backArmConfg = [0.0 for _ in rbt.ur_motors]
 
 ## Tree Structure ##
 
+dwellSteps = 10
+
 # Can collection subtree, has memory: Do not advance until prev child has completed #
 actionSq = Sequence( memory = True )
 actionSq.add_children([
     # TickCounter( 1 ),
     FailureIsRunning(  COND_test_func( "Grasp Dist Check", d_LT_500 )  ), # - 1. WAIT for can to approach robot
-    # TickCounter( 1 ),
-    SetFingerAngles( "Grasp", rbt, dwellSteps, graspFingers ), # ------------ 2. GRASP
-    # TickCounter( 1 ),
+    # TickCounter( dwellSteps ),
+    SetFingerAngles( "Grasp", rbt, graspFingers ), # ------------ 2. GRASP
+    TickCounter( dwellSteps ),
     SetArmAngles( "Rotate", rbt, turnArmConfg ), # -------------------------- 3. ROTATE
-    # TickCounter( 1 ),
+    TickCounter( dwellSteps ),
     FailureIsRunning(  COND_test_func( "Release Posn Check", p_LT_m2p3 )  ), # 4. Do not release until at correct position
-    # TickCounter( 1 ),
-    SetFingerAngles( "Release", rbt, dwellSteps*20 , relesFingers ), # ---------- 5. RELEASE
-    # TickCounter( 1 ),
+    # TickCounter( dwellSteps ),
+    SetFingerAngles( "Release", rbt, relesFingers ), # ---------- 5. RELEASE
+    # TickCounter( dwellSteps ),
     SetArmAngles( "Rotate Back", rbt, backArmConfg ), # --------------------- 6. ROTATE BACK
-    # TickCounter( 3 ),
-    FailureIsRunning(  COND_test_func( "Return Posn Check", p_GT_m0p1 )  ), # 7. WAIT for arm to reach original config
-    # TickCounter( 3 ),
+    MSG( initMsg = "Message Initialized!", tickMsg = "Moving back!" ),
+    # # TickCounter( 3 ),
+    # FailureIsRunning(  COND_test_func( "Return Posn Check", p_GT_m0p1 )  ), # 7. WAIT for arm to reach original config
+    # TickCounter( dwellSteps ),
 ])
 
 # Root, no memory: tick all children every timestep #
@@ -350,10 +428,9 @@ while rbt.step( timestep ) != -1:
     # Send a tick down the tree from the root node
     rootNode.tick_once() 
     
-    print( f"Ran node: {rootNode.tip().name}" )
-    
     # Every N steps, Print the present state of the tree
     if i%N == 0:
         print( f"\n--------- Tick {i} ---------\n" )
+        print( f"Ran node: {rootNode.tip().name}" )
         print( py_trees.display.unicode_tree(root=rootNode, show_status=True) )
         print("\n")
