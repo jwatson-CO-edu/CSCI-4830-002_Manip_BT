@@ -204,18 +204,8 @@ class GetData( Behaviour ):
         
 class TickCounter( Behaviour ):
     """
-    A useful utility behaviour for demos and tests. Simply
-    ticks with :data:`~py_trees.common.Status.RUNNING` for
-    the specified number of ticks before returning the
-    requested completion status (:data:`~py_trees.common.Status.SUCCESS`
-    or :data:`~py_trees.common.Status.FAILURE`).
-
-    This behaviour will reset the tick counter when initialising.
-
-    Args:
-        name: name of the behaviour
-        duration: number of ticks to run
-        completion_status: status to switch to once the counter has expired
+    This needed to be changed slightly from 
+    https://py-trees.readthedocs.io/en/devel/modules.html?highlight=tickcounter#py_trees.behaviours.TickCounter
     """
     def __init__(
         self,
@@ -234,8 +224,6 @@ class TickCounter( Behaviour ):
         """
         Reset the tick counter.
         """
-        
-        # self.counter = 0
         self.status = Status.RUNNING
         if not self.lock:
             print( "TickCounter initialized and locked!" )
@@ -259,6 +247,7 @@ class TickCounter( Behaviour ):
             self.lock = 0
             self.counter = 0
         return self.status
+        
         
         
 """ ##### Conditions #####
@@ -288,20 +277,7 @@ class COND_test_func( Behaviour ):
             self.status = Status.FAILURE
         return self.status
         
-
-class MSG( Behaviour ):
-    def __init__( self, name = "MSG", initMsg = "Initialized!", tickMsg = "Success!" ):
-        """ Called once when the behavior is instantiated """
-        super().__init__( name ) 
-        self.initMsg = initMsg
-        self.tickMsg = tickMsg
-    def initialise( self ):
-        self.status = Status.RUNNING
-        print( self.initMsg )
-    def update( self ):
-        self.status = Status.SUCCESS
-        print( self.tickMsg )
-        return self.status
+        
         
 ##### Actions #####
 
@@ -347,7 +323,6 @@ class SetArmAngles( Behaviour ):
         """ Always succeed """
         self.status = Status.SUCCESS
         return self.status
-        # return Status.SUCCESS
             
 
         
@@ -375,9 +350,7 @@ relesFingers = [mtr.getMinPosition() for mtr in rbt.hand_motors]
 turnArmConfg = [-1.88, -2.14, -2.38, -1.51]
 backArmConfg = [0.0 for _ in rbt.ur_motors]
 
-
-## Tree Structure ##
-
+## Timing and Speed ##
 if rbt.rName == "UR3e":
     dwell1 = 11
     dwell2 =  3
@@ -390,6 +363,8 @@ elif rbt.rName == "UR10e":
     dwell1 =  9
     dwell2 =  1
     rbt.set_motor_speed( 1.65 ) # UR motor speed
+
+## Tree Structure ##
 
 # Can collection subtree, has memory: Do not advance until prev child has completed #
 actionSq = Sequence( memory = True )
@@ -433,7 +408,7 @@ while rbt.step( timestep ) != -1:
     
     # Every N steps, Print the present state of the tree
     if i%N == 0:
-        print( f"\n--------- Tick {i} ---------\n" )
-        print( f"Ran node: {rootNode.tip().name}" )
+        print( f"\n--------- Tick {i} ---------\n" ) # Print header
+        print( f"Ran node: {rootNode.tip().name}" )  # Find and print the node that just run
         print( py_trees.display.unicode_tree(root=rootNode, show_status=True) )
         print("\n")
