@@ -123,7 +123,7 @@ class UR_Controller( Robot ):
 
 # Robot #
 rbt = UR_Controller()
-rbt.set_motor_speed( 1.2 ) # UR motor speed
+
 
 # Constants #
 dwellSteps = 10 # - Number of timesteps to pause
@@ -234,16 +234,13 @@ class TickCounter( Behaviour ):
         """
         Reset the tick counter.
         """
-        print( "TickCounter initialized!" )
+        
         # self.counter = 0
         self.status = Status.RUNNING
         if not self.lock:
-            self.counter = 0
+            print( "TickCounter initialized and locked!" )
             self.lock = 1
-        
-        
-    def terminate( self, newStatus ):
-        self.lock = 0
+            
 
     def update( self ):
         """
@@ -258,6 +255,9 @@ class TickCounter( Behaviour ):
             self.status = Status.RUNNING
         else:
             self.status = self.completion_status
+            print( "TickCounter UNlocked!" )
+            self.lock = 0
+            self.counter = 0
         return self.status
         
         
@@ -378,27 +378,30 @@ backArmConfg = [0.0 for _ in rbt.ur_motors]
 
 ## Tree Structure ##
 
-dwellSteps = 10
+if rbt.rName == "UR3e":
+    dwell1 = 11
+    dwell2 =  3
+    rbt.set_motor_speed( 1.35 ) # UR motor speed
+elif rbt.rName == "UR5e":
+    dwell1 =  6
+    dwell2 =  1
+    rbt.set_motor_speed( 1.20 ) # UR motor speed
+elif rbt.rName == "UR10e":
+    dwell1 =  9
+    dwell2 =  1
+    rbt.set_motor_speed( 1.65 ) # UR motor speed
 
 # Can collection subtree, has memory: Do not advance until prev child has completed #
 actionSq = Sequence( memory = True )
 actionSq.add_children([
-    # TickCounter( 1 ),
     FailureIsRunning(  COND_test_func( "Grasp Dist Check", d_LT_500 )  ), # - 1. WAIT for can to approach robot
-    # TickCounter( dwellSteps ),
     SetFingerAngles( "Grasp", rbt, graspFingers ), # ------------ 2. GRASP
-    TickCounter( dwellSteps ),
+    TickCounter( dwell1 ),
     SetArmAngles( "Rotate", rbt, turnArmConfg ), # -------------------------- 3. ROTATE
-    TickCounter( dwellSteps ),
+    TickCounter( dwell2 ),
     FailureIsRunning(  COND_test_func( "Release Posn Check", p_LT_m2p3 )  ), # 4. Do not release until at correct position
-    # TickCounter( dwellSteps ),
     SetFingerAngles( "Release", rbt, relesFingers ), # ---------- 5. RELEASE
-    # TickCounter( dwellSteps ),
     SetArmAngles( "Rotate Back", rbt, backArmConfg ), # --------------------- 6. ROTATE BACK
-    MSG( initMsg = "Message Initialized!", tickMsg = "Moving back!" ),
-    # # TickCounter( 3 ),
-    # FailureIsRunning(  COND_test_func( "Return Posn Check", p_GT_m0p1 )  ), # 7. WAIT for arm to reach original config
-    # TickCounter( dwellSteps ),
 ])
 
 # Root, no memory: tick all children every timestep #
