@@ -1,14 +1,12 @@
 """
 BT_ctrl.py
 Behavior Tree that matches the C controller for the UR example world in WeBots
-James Watson, 2020-02
+James Watson, 2020-03
 """
 
 ## NOTE, This file assumes the following:
 ## * All robots use this controller
 ## * There is at least robot named "UR5e"
-## * UR5e rangefinder is named "range-finder"
-## * UR5e camera      is named "camera"
 
 
 
@@ -68,11 +66,6 @@ class UR_Controller( Robot ):
         self.distance_sensor.enable( self.TIME_STEP )
         self.position_sensor = self.getDevice('wrist_1_joint_sensor')
         self.position_sensor.enable( self.TIME_STEP )
-        # if self.rName == "UR5e":
-            # self.rangefnd_sensor = self.getDevice('range-finder') 
-            # self.rangefnd_sensor.enable( self.TIME_STEP )
-            # self.rgbimage_sensor = self.getDevice('camera') 
-            # self.rgbimage_sensor.enable( self.TIME_STEP )
 
         print( "Robot controller init:", self.rName )
         
@@ -94,9 +87,6 @@ class UR_Controller( Robot ):
         """ Get distance and position """
         dist = self.distance_sensor.getValue()
         posn = self.position_sensor.getValue()
-        # if self.rName == "UR5e":
-            # rang = self.rangefnd_sensor.getRangeImage()
-            # imag = self.rgbimage_sensor.getImage()
         return dist, posn
     
     
@@ -172,14 +162,12 @@ class GetData( Behaviour ):
         if the  the behavior receives a tick after returning SUCCESS/FAILURE. 
         Expensive, long-running init should NOT be done here. ~ No return value
         """
-        global d, p, c
+        global d, p
         
         # If the counter is non-positive, we want to fetch data
         
         # 1. Fetch data
         d, p = self.robot.fetch_data()
-        
-        c -= 1
     
     
     def update( self ):
@@ -217,7 +205,7 @@ class TickCounter( Behaviour ):
         self.completion_status = completion_status
         self.duration          = duration
         self.counter           = 0
-        self.lock  = 0
+        self.lock              = 0
 
         
     def initialise( self ):
@@ -226,7 +214,6 @@ class TickCounter( Behaviour ):
         """
         self.status = Status.RUNNING
         if not self.lock:
-            print( "TickCounter initialized and locked!" )
             self.lock = 1
             
 
@@ -242,9 +229,8 @@ class TickCounter( Behaviour ):
         if self.counter <= self.duration:
             self.status = Status.RUNNING
         else:
-            self.status = self.completion_status
-            print( "TickCounter UNlocked!" )
-            self.lock = 0
+            self.status  = self.completion_status
+            self.lock    = 0
             self.counter = 0
         return self.status
         
@@ -270,10 +256,8 @@ class COND_test_func( Behaviour ):
     def update( self ):
         """ Check parameter value against threshold """
         if self.func.__call__():
-            # print( f"Condition \"{self.name}\" TRUE" )
             self.status = Status.SUCCESS
         else:
-            # print( f"Condition \"{self.name}\" FALSE" )
             self.status = Status.FAILURE
         return self.status
         
@@ -289,10 +273,12 @@ class SetFingerAngles( Behaviour ):
         super().__init__( name ) 
         self.robot  = robotObj
         self.target = target
+        self.debug  = 0
     
     def initialise( self ):
         """ Set a target for the robot fingers, assume that they take `self.delay` timesteps to close """
-        print( self.robot.rName, f", {self.name}: Moving fingers to target {self.target}" )
+        if self.debug:
+            print( self.robot.rName, f", {self.name}: Moving fingers to target {self.target}" )
         for i, mtr in enumerate( self.robot.hand_motors ):
                 mtr.setPosition( self.target[i] )
         self.status = Status.RUNNING
@@ -311,10 +297,12 @@ class SetArmAngles( Behaviour ):
         super().__init__( name ) 
         self.robot  = robotObj
         self.target = target
+        self.debug  = 0
         
     def initialise( self ):
         """ Set a target for the robot arm """
-        print( self.robot.rName, f", {self.name}: Rotating arm to target {self.target}" )
+        if self.debug:
+            print( self.robot.rName, f", {self.name}: Rotating arm to target {self.target}" )
         for i, mtr in enumerate( self.robot.ur_motors ):
             mtr.setPosition( self.target[i] )
         self.status = Status.RUNNING
@@ -336,12 +324,10 @@ def d_LT_500():
 
 def p_LT_m2p3():
     global p
-    print( f"Release posn: {p}" )
     return p < -2.3
     
 def p_GT_m0p1():
     global p
-    print( f"Return posn: {p}" )
     return p > -0.1
 
 ## Arm and Finger Configurations ##
@@ -354,14 +340,17 @@ backArmConfg = [0.0 for _ in rbt.ur_motors]
 if rbt.rName == "UR3e":
     dwell1 = 11
     dwell2 =  3
+    dwell3 =  0
     rbt.set_motor_speed( 1.35 ) # UR motor speed
 elif rbt.rName == "UR5e":
     dwell1 =  6
     dwell2 =  1
+    dwell3 =  0
     rbt.set_motor_speed( 1.20 ) # UR motor speed
 elif rbt.rName == "UR10e":
     dwell1 =  9
     dwell2 =  1
+    dwell3 =  3
     rbt.set_motor_speed( 1.65 ) # UR motor speed
 
 ## Tree Structure ##
@@ -369,14 +358,15 @@ elif rbt.rName == "UR10e":
 # Can collection subtree, has memory: Do not advance until prev child has completed #
 actionSq = Sequence( memory = True )
 actionSq.add_children([
-    FailureIsRunning(  COND_test_func( "Grasp Dist Check", d_LT_500 )  ), # - 1. WAIT for can to approach robot
-    SetFingerAngles( "Grasp", rbt, graspFingers ), # ------------ 2. GRASP
-    TickCounter( dwell1 ),
-    SetArmAngles( "Rotate", rbt, turnArmConfg ), # -------------------------- 3. ROTATE
-    TickCounter( dwell2 ),
+    FailureIsRunning(  COND_test_func( "Grasp Dist Check", d_LT_500 )  ), # -- 1. WAIT for can to approach robot
+    SetFingerAngles( "Grasp", rbt, graspFingers ), # ------------------------- 2. GRASP
+    TickCounter( dwell1 ), # ------------------------------------------------- PAUSE for robot motors to move
+    SetArmAngles( "Rotate", rbt, turnArmConfg ), # --------------------------- 3. ROTATE
+    TickCounter( dwell2 ), # ------------------------------------------------- PAUSE for robot motors to move
     FailureIsRunning(  COND_test_func( "Release Posn Check", p_LT_m2p3 )  ), # 4. Do not release until at correct position
-    SetFingerAngles( "Release", rbt, relesFingers ), # ---------- 5. RELEASE
-    SetArmAngles( "Rotate Back", rbt, backArmConfg ), # --------------------- 6. ROTATE BACK
+    SetFingerAngles( "Release", rbt, relesFingers ), # ----------------------- 5. RELEASE
+    TickCounter( dwell3 ), # ------------------------------------------------- PAUSE for robot motors to move
+    SetArmAngles( "Rotate Back", rbt, backArmConfg ), # ---------------------- 6. ROTATE BACK
 ])
 
 # Root, no memory: tick all children every timestep #
@@ -394,13 +384,13 @@ rootNode.add_children([
 
 timestep = int( rbt.getBasicTimeStep() ) # Obtain timestep length
 rootNode.setup_with_descendants() # ------ Get tree ready to execute
-i =   0 # --------------------------------- Iteration #
-N = 100 # --------------------------------- N steps between tree prints
+i =   0 # -------------------------------- Tick #
+N = 300 # -------------------------------- N ticks between tree prints
 
 # While the simulation is running
 while rbt.step( timestep ) != -1:
     
-    # Count iteration
+    # Count Tick
     i += 1 
     
     # Send a tick down the tree from the root node
